@@ -13,7 +13,7 @@ import pino from "pino";
 import { findWeapon, WEAPONS } from "./discord-weapons.js";
 
 const logger = pino({ level: process.env.LOG_LEVEL ?? "info" });
-const token = process.env.DISCORD_BOT_TOKEN;
+const token = process.env.DISCORD_BOT_TOKEN?.trim();
 const databaseUrl = process.env.DATABASE_URL;
 const requiredRoleName = process.env.CREW_ROLE_NAME?.trim() || "本船員";
 
