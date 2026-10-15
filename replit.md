@@ -36,6 +36,7 @@ _Populate as you build — non-obvious choices a reader couldn't infer from the 
 - `/weapon` (`/武器選択`) — choose one of six weapons, only once and only with the required role.
 - `/weapon-status` (`/武器確認`) — view the owned weapon, level, and its unique skill.
 - Weapon ownership is stored in PostgreSQL with a per-server, per-member uniqueness constraint.
+- Nagi Bot wallet/API proposal: `docs/nagi-wallet-api.md`. Nagi runs in a separate Replit, so its SQLite file is not directly shared; currency debits and weapon levels must be updated by Nagi's own authenticated API in one SQLite transaction.
 - The Discord application must be invited with the `bot` and `applications.commands` scopes. Global slash commands can take time to appear after first registration.
 
 ## User preferences
