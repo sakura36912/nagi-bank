@@ -1,45 +1,76 @@
 # 凪Bot 残高・武器 API 契約案
 
-## 状態
+## 状態と配置
 
-この文書は凪Bot側に実装してもらうためのAPI案です。まだ凪Botへの接続はありません。凪BotがAPIを実装した後、武器BotにAPIクライアントを追加します。
+この文書は凪Bot側に実装してもらうためのAPI案です。凪Botと武器Botは別々のReplitで動くため、ローカルの `pirate.db` ファイル自体は共有しません。凪Botだけが自分のSQLiteを開き、武器BotはHTTPS API経由で武器・所持金を参照／更新します。
 
-## 接続条件
+APIが実装されるまでは、武器Botは現在のPostgreSQLを使い続けます。`pirate.db` への直接接続に切り替えると、凪Botとは別の空ファイルを作る危険があるためです。
 
-- 凪Botと武器Botは別々のReplitで稼働できます。SQLiteファイルをReplit間で直接共有しません。
-- 凪BotのAPIだけが、凪Bot自身のSQLiteデータベースへアクセスします。
-- APIはHTTPSで公開し、武器Botのサーバーからだけ利用できるBearer認証を設定します。
-- Bearer tokenは両BotのSecretsに保存し、Discordメッセージやログに出しません。
-- リクエストの `guildId` / `userId` はDiscordのSnowflake IDを文字列で渡します。
-- APIは `userId` を凪Botの `users` テーブルのDiscord ID列へ対応付けます。実際の列名は凪Bot側のスキーマに合わせます。
+## SQLiteデータモデル（凪Bot側）
 
-## 共通仕様
+日時はISO 8601 UTC文字列で保存します。`users` は凪Botの既存テーブルを利用し、武器Bot用に重複作成しません。
+
+```sql
+CREATE TABLE users (
+  user_id TEXT PRIMARY KEY,
+  money INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE weapons (
+  user_id TEXT PRIMARY KEY REFERENCES users(user_id),
+  weapon TEXT NOT NULL,
+  level INTEGER NOT NULL DEFAULT 1 CHECK (level >= 1),
+  attack INTEGER NOT NULL CHECK (attack >= 0),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  exp INTEGER NOT NULL DEFAULT 0,
+  boss_win INTEGER NOT NULL DEFAULT 0,
+  pvp_win INTEGER NOT NULL DEFAULT 0,
+  pvp_lose INTEGER NOT NULL DEFAULT 0,
+  skill_count INTEGER NOT NULL DEFAULT 0
+);
+```
+
+`weapons.user_id` が主キーなので、武器はDiscordユーザーごとに1つです。複数サーバーで別々の武器を持たせる仕様にする場合は `guild_id` を加え、主キーを `(guild_id, user_id)` に変更する必要があります。
+
+初期選択の例は、大剣を `level=1`, `attack=10` とします。他の5種の初期攻撃力、およびレベルごとの強化費用・攻撃力上昇ルールは未指定のため、凪Bot側の設定前に確定が必要です。
+
+## 共通API仕様
 
 - Base URLは凪Botの管理者が決めます。以下では `https://nagi.example` を例として使います。
-- 認証が必要な全リクエストに `Authorization: Bearer <service-token>` を付けます。
+- 全リクエストをHTTPSにし、武器Botからのリクエストに `Authorization: Bearer <service-token>` を必須とします。
+- Bearer tokenは両BotのSecretsに保存し、Discordの返信やログには出しません。
 - JSONを送受信し、レスポンスには `Content-Type: application/json` を付けます。
 - 更新系リクエストには `Idempotency-Key` を必須とします。武器BotはDiscord interaction IDを使用します。
-- 同じキー・同じ内容の再送は、最初の処理結果を返し、残高やレベルを再度変更しません。同じキーを異なる内容で使った場合は `409 idempotency_conflict` を返します。
-- 認証失敗は `401 unauthorized`、入力不正は `400 invalid_request` とします。
+- 同じキー・同じ内容の再送は最初の結果を返し、二重登録・二重課金を防ぎます。同じキーを異なる内容に使った場合は `409 idempotency_conflict` を返します。
+- Idempotency-Keyの保存には、必要に応じて凪Bot側に専用テーブルを追加します。
 
-## 武器の所持状態を読む
+## 鍛冶屋の情報を読む
 
-`GET /api/v1/guilds/{guildId}/users/{userId}/weapon`
+`GET /api/v1/users/{userId}/forge`
 
-所持武器がある場合:
+成功時:
 
 ```json
 {
   "weaponId": "greatsword",
-  "level": 1
+  "weapon": "大剣",
+  "level": 1,
+  "attack": 10,
+  "money": 35000,
+  "nextUpgradeCost": null
 }
 ```
 
-所持武器がない場合は `404 weapon_not_found` を返します。
+価格ルール未設定時は `nextUpgradeCost: null` を返します。武器未所持は `404 weapon_not_found`、凪Bot未登録ユーザーは `404 user_not_found` です。
+
+武器Botの `/武器確認` は武器・Lv・攻撃力・固有スキルを表示し、`/鍛冶屋` はさらに所持金と次の強化費用を表示します。スキル名・説明は武器Bot側の6種の定義に対応させます。
 
 ## 初回の武器選択を保存する
 
-`POST /api/v1/weapons/select`
+`POST /api/v1/users/{userId}/weapon`
 
 Headers:
 
@@ -53,13 +84,11 @@ Request:
 
 ```json
 {
-  "guildId": "123456789012345678",
-  "userId": "234567890123456789",
   "weaponId": "greatsword"
 }
 ```
 
-選択可能な `weaponId` は次の6種です。
+選択可能な `weaponId`:
 
 | ID | 表示名 |
 | --- | --- |
@@ -70,59 +99,56 @@ Request:
 | `dual-blades` | 双剣 |
 | `staff` | 杖 |
 
-作成成功時は `201 Created`:
+作成成功時は `201 Created` として `weaponId`, `weapon`, `level=1`, `attack` を返します。APIは凪BotのSQLiteで対象ユーザーが `users` に存在することを確認し、`weapons` に一度だけ登録します。重複選択は `409 weapon_already_owned` とし、既存行を変更しません。
 
-```json
-{
-  "weaponId": "greatsword",
-  "level": 1
-}
-```
-
-選択状態は凪BotのSQLiteにある独立した `weapons` テーブルで管理します。少なくとも `guild_id`, `user_id`, `weapon_id`, `level` を保持し、`(guild_id, user_id)` に一意制約を付けます。重複選択は `409 weapon_already_owned` とし、既存行を変更しません。
-
-武器BotはDiscord上で「本船員」ロールを確認してからAPIを呼びます。APIは信頼済みの武器Botサービスからの認証済み要求だけを受け付けてください。
+武器BotはDiscord上で「本船員」ロールを確認してからAPIを呼びます。APIは認証済みの武器Botサービスからの要求のみ受け付けてください。
 
 ## 武器を強化し、凪を減算する
 
-`POST /api/v1/weapons/upgrade`
+`POST /api/v1/users/{userId}/weapon/upgrade`
 
-Request:
+Request bodyは不要です。武器Botから費用や攻撃力を受け取らず、凪Botが現在の `level` と価格設定から計算します。
 
-```json
-{
-  "guildId": "123456789012345678",
-  "userId": "234567890123456789"
-}
-```
-
-価格はAPI側で現在の武器レベルから決定します。Discordクライアントや武器Botから金額を受け取ってはいけません。価格ルールが未設定の場合は `422 upgrade_price_not_configured` を返し、残高・武器レベルのどちらも変更しません。
-
-強化成功時は `200 OK`:
+強化成功時は `200 OK`。以下の攻撃力・費用・残高はレスポンス形式の説明用の仮値で、ゲーム内の価格や成長率を確定するものではありません。
 
 ```json
 {
   "weaponId": "greatsword",
   "previousLevel": 1,
   "level": 2,
+  "attack": 12,
   "cost": 100,
-  "money": 900
+  "money": 34900
 }
 ```
 
-凪Botは**同じSQLiteトランザクション内**で、所持武器の確認、`users.money` の残高確認と減算、`weapons.level` の加算を実施してください。いずれかが失敗したらすべてロールバックします。武器が未所持の場合は `404 weapon_not_found`、残高不足は `409 insufficient_funds` とし、どちらもデータを変更しません。
+レベルごとの価格ルールが未設定の場合は `422 upgrade_price_not_configured` を返し、残高も武器データも変更しません。
 
-## 実装前に凪Bot側で確認する項目
+凪Botは**同じSQLiteトランザクション内**で、`users.money` の確認・減算、`weapons.level` と `weapons.attack` の更新、`updated_at` の更新を行います。いずれかが失敗したらすべてロールバックしてください。残高不足は `409 insufficient_funds` とし、マイナス残高を許可しません。
 
-- `users` テーブルでDiscordユーザーIDを特定する列名
-- `users.money` の型と通貨が整数単位かどうか
-- `weapons` テーブルの既存定義、または上記列と一意制約を追加できるか
-- レベルごとの強化価格。価格が決まるまで強化エンドポイントは無効のままにします。
-- 凪BotがHTTPS APIを提供できる公開URLと、武器Bot用のサービス認証方式
+## エラー形式
 
-## 安全要件
+```json
+{
+  "error": {
+    "code": "insufficient_funds",
+    "message": "残高が不足しています"
+  }
+}
+```
 
-- SQLはパラメータ化し、`guildId`、`userId`、`weaponId` をSQL文に文字列連結しません。
-- 残高とレベルの更新は必ずSQLiteトランザクションで行います。
-- `money` が不足していないことを条件付き更新で検査し、マイナス残高を許可しません。
-- APIの認証情報、Authorization header、残高を含むrequest/response bodyをログに記録しません。
+主なHTTP status:
+
+- `400 invalid_request` — 不正な入力
+- `401 unauthorized` — サービス認証失敗
+- `404 user_not_found` / `404 weapon_not_found` — 対象データなし
+- `409 weapon_already_owned` / `409 insufficient_funds` / `409 idempotency_conflict` — 状態競合
+- `422 upgrade_price_not_configured` — 強化価格未設定
+
+## 安全要件と未確定事項
+
+- SQLはパラメータ化し、ユーザーID・武器IDをSQL文へ文字列連結しません。
+- お金と武器レベル／攻撃力は同じSQLiteトランザクションで更新します。
+- `money` が費用以上である条件を更新時にも確認し、同時実行でも二重使用や負の残高を許しません。
+- Authorization header、認証情報、残高を含むrequest/response bodyをログに記録しません。
+- 凪Bot側のAPI URL、`users.user_id` がDiscord IDであること、他5種の初期攻撃力、強化費用と攻撃力上昇式は未確定です。

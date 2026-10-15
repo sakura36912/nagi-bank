@@ -29,14 +29,16 @@ _Populate as you build — short repo map plus pointers to the source-of-truth f
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Nagi Bot runs in another Replit; SQLite files are isolated, so currency/weapon state must be accessed through Nagi's authenticated HTTPS API.
+- The proposed API and SQLite schema are documented in `docs/nagi-wallet-api.md`; keep `users.money` and `weapons` updates atomic in Nagi's database.
+- The requested `weapons.user_id` primary key represents one weapon per Discord account globally, not one per guild.
 
 ## Product
 
 - `/weapon` (`/武器選択`) — choose one of six weapons, only once and only with the required role.
 - `/weapon-status` (`/武器確認`) — view the owned weapon, level, and its unique skill.
-- Weapon ownership is stored in PostgreSQL with a per-server, per-member uniqueness constraint.
-- Nagi Bot wallet/API proposal: `docs/nagi-wallet-api.md`. Nagi runs in a separate Replit, so its SQLite file is not directly shared; currency debits and weapon levels must be updated by Nagi's own authenticated API in one SQLite transaction.
+- Current weapon selection still uses PostgreSQL until the Nagi API is live; do not silently create a local `pirate.db` copy.
+- Nagi Bot wallet/API proposal: `docs/nagi-wallet-api.md`. Nagi's API owns the SQLite data and performs money/weapon updates in one transaction.
 - The Discord application must be invited with the `bot` and `applications.commands` scopes. Global slash commands can take time to appear after first registration.
 
 ## User preferences
