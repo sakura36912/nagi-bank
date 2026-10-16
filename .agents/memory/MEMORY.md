@@ -1,0 +1,1 @@
+- [discord.py command localization](discord-py-localization.md) — Japanese slash-command names need a registered Translator; locale_str metadata alone does not publish translations.
