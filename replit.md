@@ -1,27 +1,28 @@
-# Discord武器選択Bot
+# Discord鍛冶屋Bot
 
-「本船員」ロールのメンバーが鍛冶屋で武器を1つだけ選び、武器とレベルをサーバーごとに保存するDiscord Botです。
+Python版Discord BOTが「本船員」ロールのメンバーに武器選択・確認・強化機能を提供します。既存のTypeScript版は比較・切り戻し用に残し、同じDiscord application tokenで同時起動しません。
 
 ## Run & Operate
 
 - `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm --filter @workspace/scripts run discord-bot` — run the Discord bot
+- `pnpm --filter @workspace/scripts run discord-bot` — run the Python discord.py bot
+- `pnpm --filter @workspace/scripts run discord-bot-node` — run the retained TypeScript version (do not run alongside Python)
+- `python -m unittest discover -s tests` — run Python unit tests
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
 - Required secret: `DISCORD_BOT_TOKEN`
+- Required env: `NAGI_API_BASE_URL` — Nagi Bot HTTPS API base URL
+- Required secret: `NAGI_API_TOKEN` — service-to-service bearer token for Nagi API
 - Optional env: `CREW_ROLE_NAME` — role name allowed to select a weapon (defaults to `本船員`)
+- Optional env: `WEAPON_DB_PATH` — local SQLite mirror path (defaults to `data/pirate.db`)
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Python 3.13, discord.py 2.x
+- Local SQLite mirror plus authenticated HTTPS calls to the separate Nagi Bot
+- Existing TypeScript / PostgreSQL implementation remains available as an alternate version
 
 ## Where things live
 
@@ -29,16 +30,18 @@ _Populate as you build — short repo map plus pointers to the source-of-truth f
 
 ## Architecture decisions
 
-- Nagi Bot runs in another Replit; SQLite files are isolated, so currency/weapon state must be accessed through Nagi's authenticated HTTPS API.
-- The proposed API and SQLite schema are documented in `docs/nagi-wallet-api.md`; keep `users.money` and `weapons` updates atomic in Nagi's database.
-- The requested `weapons.user_id` primary key represents one weapon per Discord account globally, not one per guild.
+- Nagi Bot runs in another Replit; local SQLite files are not shared. Nagi's authenticated HTTPS API is authoritative for both wallet and weapon changes.
+- The Python BOT keeps a durable SQLite mirror at `data/pirate.db`, but never uses that mirror to authorize a charge or overwrite newer API state.
+- Nagi must deduct currency and update weapon level/stats in the same transaction. The BOT mirrors only successful API responses.
+- The account key is Discord user ID, so one user owns one weapon globally, not one per guild.
 
 ## Product
 
-- `/weapon` (`/武器選択`) — choose one of six weapons, only once and only with the required role.
-- `/weapon-status` (`/武器確認`) — view the owned weapon, level, and its unique skill.
-- Current weapon selection still uses PostgreSQL until the Nagi API is live; do not silently create a local `pirate.db` copy.
-- Nagi Bot wallet/API proposal: `docs/nagi-wallet-api.md`. Nagi's API owns the SQLite data and performs money/weapon updates in one transaction.
+- `/武器選択` — choose one of six weapons, only once and only with the required role.
+- `/武器` — view public weapon info, skill, next upgrade price, and success rate; internal stats are hidden.
+- `/強化` — attempt an upgrade; the Nagi API charges on both success and failure and rolls back no stats on failure.
+- Administrator commands: `/武器変更`, `/武器リセット`, `/武器データ編集`.
+- Nagi Bot API contract: `docs/nagi-wallet-api.md`.
 - The Discord application must be invited with the `bot` and `applications.commands` scopes. Global slash commands can take time to appear after first registration.
 
 ## User preferences

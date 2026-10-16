@@ -1,0 +1,8 @@
+[project]
+name = "discord-forge-bot"
+version = "0.1.0"
+description = "Python discord.py鍛冶屋Bot"
+requires-python = ">=3.13"
+dependencies = [
+    "discord-py>=2.7.1",
+]
