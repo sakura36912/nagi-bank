@@ -41,6 +41,7 @@ _Populate as you build — short repo map plus pointers to the source-of-truth f
 - `/武器` — view public weapon info, skill, next upgrade price, and success rate; internal stats are hidden.
 - `/強化` — attempt an upgrade; the Nagi API charges on both success and failure and rolls back no stats on failure.
 - Administrator commands: `/武器変更`, `/武器リセット`, `/武器データ編集`.
+- Boss events: `/ボス開催`, `/ボス終了`, `/ボス情報`, `/参加`, `/攻撃`, `/回復`; event runs, membership, action outbox, and rewards persist in SQLite.
 - Nagi Bot API contract: `docs/nagi-wallet-api.md`.
 - The Discord application must be invited with the `bot` and `applications.commands` scopes. Global slash commands can take time to appear after first registration.
 

@@ -1,1 +1,1 @@
-- [discord.py command localization](discord-py-localization.md) — Japanese slash-command names need a registered Translator; locale_str metadata alone does not publish translations.
+- [discord.py command localization](discord-py-localization.md) — Register a Translator and keep Japanese option labels free of uppercase Latin and punctuation rejected by Discord.

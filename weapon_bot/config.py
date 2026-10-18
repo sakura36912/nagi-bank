@@ -1,6 +1,7 @@
 """BOT設定。凪API側にも同じ強化価格・成功率・成長値を設定してください。"""
 
 from dataclasses import dataclass
+from typing import Any
 import os
 
 
@@ -28,6 +29,67 @@ WEAPONS: dict[str, Weapon] = {
     "dual-blades": Weapon("dual-blades", "双剣", "疾風連斬", "身軽な連続攻撃で畳みかける。", 7, 3, 96, 2, 1, 1),
     "staff": Weapon("staff", "杖", "魔力解放", "内なる魔力を解き放つ。", 7, 6, 82, 2, 2, 2),
 }
+
+
+@dataclass(frozen=True)
+class BossDefinition:
+    """設定ファイルで編集・追加できるボスの基本情報。"""
+
+    boss_id: str
+    name: str
+    solo_hp: int
+    party_hp: int
+    difficulty: str
+    attack: int
+    defense: int
+    reward: int
+    icon: str
+    description: str
+    skills: tuple[str, ...] = ()
+    phases: tuple[dict[str, Any], ...] = ()
+
+
+BOSSES: dict[str, BossDefinition] = {
+    "kraken": BossDefinition(
+        "kraken", "クラーケン", 300, 900, "通常", 30, 2, 600, "🐙",
+        "深海から現れた巨大な海魔。", ("触手攻撃",),
+    ),
+    "megalodon": BossDefinition(
+        "megalodon", "メガロドン", 500, 1_500, "強敵", 45, 4, 1_500, "🦈",
+        "獲物を逃さない古代の巨大鮫。", ("急襲",),
+    ),
+    "leviathan": BossDefinition(
+        "leviathan", "リヴァイアサン", 900, 2_800, "伝説", 60, 7, 3_500, "🐋",
+        "海を支配する伝説の巨獣。", ("大津波",),
+        ({"hp_below_percent": 50, "behavior": "enraged"},),
+    ),
+}
+
+# 値は初期例です。実際のサーバーロール名に合わせて設定ファイルを編集できます。
+ROLE_DAMAGE_BONUSES: dict[str, float] = {
+    "船長": 1.20,
+    "副船長": 1.10,
+    "戦闘員": 1.10,
+    "本船員": 1.00,
+}
+WEAPON_LEVEL_DAMAGE_BONUS = 0.08
+WEAPON_LEVEL_DEFENSE_BONUS = 0.05
+DAMAGE_RANDOM_MIN = 0.80
+DAMAGE_RANDOM_MAX = 1.20
+BOSS_DAMAGE_RANDOM_MIN = 0.90
+BOSS_DAMAGE_RANDOM_MAX = 1.10
+CRITICAL_CHANCE = 0.10
+CRITICAL_MULTIPLIER = 1.50
+
+# 戦闘通貨とプレイヤーHP。凪APIのwallet transactionにも同じ料金を設定します。
+BOSS_ATTACK_COST = 100
+BOSS_HEAL_COST = 250
+BOSS_HEAL_AMOUNT = 30
+PLAYER_MAX_HP = 100
+DEFAULT_BOSS_DURATION_MINUTES = 60
+DEFAULT_PARTY_WINDOW_MINUTES = 5
+PARTY_MAX_SIZE = 4
+PARTY_MIN_SIZE = 2
 
 # キーは強化前のレベル。Lv5以降は4,000ずつ増額します。
 UPGRADE_COSTS: dict[int, int] = {1: 1_000, 2: 2_500, 3: 5_000, 4: 8_000}

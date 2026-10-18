@@ -11,7 +11,9 @@ from discord import app_commands
 from discord.ext import commands
 
 from weapon_bot.cogs.admin import setup as setup_admin
+from weapon_bot.cogs.boss import setup as setup_boss
 from weapon_bot.cogs.forge import setup as setup_forge
+from weapon_bot.bosses.store import BossStore
 from weapon_bot.database import WeaponMirror
 from weapon_bot.localization import JapaneseTranslator
 from weapon_bot.nagi_api import NagiApi
@@ -25,15 +27,17 @@ logger = logging.getLogger("weapon-bot")
 
 
 class WeaponBot(commands.Bot):
-    def __init__(self, api: NagiApi, mirror: WeaponMirror) -> None:
+    def __init__(self, api: NagiApi, mirror: WeaponMirror, boss_store: BossStore) -> None:
         intents = discord.Intents.default()
         super().__init__(command_prefix="!", intents=intents)
         self.api = api
         self.mirror = mirror
+        self.boss_store = boss_store
 
     async def setup_hook(self) -> None:
         await setup_forge(self, self.api, self.mirror)
         await setup_admin(self, self.api, self.mirror)
+        await setup_boss(self, self.api, self.mirror, self.boss_store)
         await self.tree.set_translator(JapaneseTranslator())
         await self.tree.sync()
         logger.info("スラッシュコマンドを同期しました。")
@@ -69,8 +73,10 @@ def main() -> None:
 
     mirror = WeaponMirror()
     mirror.initialize()
+    boss_store = BossStore()
+    boss_store.initialize()
     api = NagiApi()
-    bot = WeaponBot(api, mirror)
+    bot = WeaponBot(api, mirror, boss_store)
     try:
         bot.run(token, log_handler=None)
     except KeyboardInterrupt:

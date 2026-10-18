@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
+from collections.abc import Iterator
 from typing import Any
 
 from weapon_bot.config import database_path
@@ -15,13 +17,21 @@ class WeaponMirror:
     def __init__(self, path: str | None = None) -> None:
         self.path = path or database_path()
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self.path, timeout=10)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA journal_mode=WAL")
         connection.execute("PRAGMA busy_timeout=10000")
-        return connection
+        try:
+            yield connection
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
     def initialize(self) -> None:
         with self._connect() as connection:

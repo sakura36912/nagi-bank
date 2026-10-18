@@ -27,6 +27,23 @@ class NagiApi:
     async def get_forge(self, user_id: str) -> dict[str, Any]:
         return await self._request("GET", f"/api/v1/users/{quote(user_id, safe='')}/forge")
 
+    async def wallet_transaction(
+        self,
+        user_id: str,
+        *,
+        kind: str,
+        amount: int,
+        reference_id: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        """凪APIに通貨の減算・報酬加算を冪等に依頼する。"""
+        return await self._request(
+            "POST",
+            f"/api/v1/users/{quote(user_id, safe='')}/wallet/transactions",
+            body={"kind": kind, "amount": amount, "referenceId": reference_id},
+            idempotency_key=idempotency_key,
+        )
+
     async def select_weapon(self, user_id: str, weapon_id: str, interaction_id: str) -> dict[str, Any]:
         return await self._request(
             "POST",

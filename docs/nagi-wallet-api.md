@@ -171,6 +171,30 @@ BOT側ではDiscord Administrator権限を確認した後、以下を呼び出�
 
 成功レスポンスは、`GET /forge` と同じ形式で最新状態を返します。武器リセットでもユーザーの凪残高は削除しません。
 
+## ボス戦の通貨取引
+
+ボス討伐はイベント・参加者・HP・ダメージを武器BOT側の `data/pirate.db` に保存します。所持金は引き続き凪APIだけを正本とします。BOTは `/攻撃` と `/回復` の処理前にSQLiteへ保留アクションを保存し、その後にこのAPIを呼びます。
+
+`POST /api/v1/users/{userId}/wallet/transactions`
+
+```json
+{
+  "kind": "boss_attack",
+  "amount": 100,
+  "referenceId": "discord-interaction-id"
+}
+```
+
+- `kind` は `boss_attack`, `boss_heal`, `boss_reward` のいずれか。
+- `boss_attack` と `boss_heal` は `amount` を減算し、残高不足なら `409 insufficient_funds`。BOTと凪APIの設定値を一致させ、API側で許可された料金以外を拒否する。
+- `boss_reward` は `amount` を加算する。金額は認証済みBOTからのみ受け取り、サーバー側で妥当な範囲を検証する。
+- 成功時は `{ "transactionId": "...", "kind": "boss_attack", "amount": 100, "money": 34900 }` を返す。
+- 課金・報酬付与・冪等キーの記録は同じSQLiteトランザクションで行う。繰り返し同じキーを受け取った場合は同じ結果を返し、二重引落し・二重付与を防ぐ。
+- 武器BOTは保留中処理の再実行に同じ `Idempotency-Key` を使う（攻撃・回復はDiscord interaction ID、報酬はローカル報酬ID）。結果確定までローカルの保留状態を削除しない。
+
+現在のPython設定の初期値は、攻撃 $100、回復 $250、回復量30HPです。ボス報酬は各ボス設定から取得します。料金は `weapon_bot/config.py` と凪API側で一致させてください。
+ボスは設定ファイルから追加でき、ソロHPは参加者ごとに独立、パーティHPはグループで共有します。パーティは4人で即開始、受付終了時に2〜4人なら開始、1人ならキャンセルします。ボスは攻撃後に反撃し、防御値で軽減したHPダメージを攻撃者に与えます。プレイヤーHPが0のときは攻撃できず、/回復 が必要です。
+
 ## エラー形式
 
 ```json
